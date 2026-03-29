@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { SITE_NAME } from "@/lib/constants";
 
 export function Footer() {
@@ -7,9 +8,13 @@ export function Footer() {
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <div className="flex flex-col items-center gap-6 sm:flex-row sm:justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-maroon text-white font-black text-xs">
-              12
-            </div>
+            <Image
+              src="/logo.png"
+              alt="12th Van"
+              width={32}
+              height={32}
+              className="h-8 w-8 rounded-lg object-cover border-2 border-maroon-dark"
+            />
             <span className="font-bold text-foreground">{SITE_NAME}</span>
           </div>
 
