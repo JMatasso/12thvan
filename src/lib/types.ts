@@ -47,6 +47,9 @@ export interface Booking {
   total_price_cents: number;
   stripe_payment_intent_id: string | null;
   created_at: string;
+  rider_name?: string;
+  rider_phone?: string;
+  rider_email?: string;
   rider?: User;
   ride_slot?: RideSlot;
 }

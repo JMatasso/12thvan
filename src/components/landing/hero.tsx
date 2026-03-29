@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, Shield } from "lucide-react";
@@ -8,21 +9,25 @@ import { Button } from "@/components/ui/button";
 export function Hero() {
   return (
     <section className="relative flex min-h-[100vh] items-center justify-center overflow-hidden bg-maroon-dark pt-16">
-      {/* Background video */}
+      {/* Chilifest background image — centered with maroon vignette */}
       <div className="absolute inset-0">
-        <video
-          autoPlay
-          loop
-          muted
-          playsInline
-          className="h-full w-full object-cover"
-        >
-          <source src="/videos/hero.mp4" type="video/mp4" />
-        </video>
+        <Image
+          src="/chilifest.jpg"
+          alt="Chilifest aerial view"
+          fill
+          priority
+          className="object-cover object-center opacity-40"
+        />
+        {/* Radial vignette: maroon edges fading to transparent center */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: "radial-gradient(ellipse 70% 60% at 50% 50%, transparent 0%, rgba(45,0,0,0.6) 50%, rgba(45,0,0,0.95) 80%, rgb(45,0,0) 100%)",
+          }}
+        />
+        {/* Top edge fade for navbar blend */}
+        <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-maroon-dark to-transparent" />
       </div>
-
-      {/* Dark overlay for text readability */}
-      <div className="absolute inset-0 bg-maroon-dark/70" />
 
       <div className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6">
         <div className="flex flex-col items-center text-center">
@@ -70,7 +75,7 @@ export function Hero() {
               </Button>
             </Link>
             <a href="#how-it-works">
-              <Button variant="secondary" size="xl" className="border-white/20 text-white hover:bg-white/10 hover:border-white/40">
+              <Button variant="secondary" size="xl" className="border-white/20 bg-transparent text-white hover:bg-white/10 hover:border-white/40">
                 See How It Works
               </Button>
             </a>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Menu, X, Shield, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SITE_NAME } from "@/lib/constants";
@@ -30,9 +31,13 @@ export function Navbar() {
     <nav className="fixed top-0 z-40 w-full border-b border-white/10 bg-maroon-dark/95 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gold text-maroon-dark font-black text-sm">
-            12
-          </div>
+          <Image
+            src="/logo.png"
+            alt="12th Van mascot"
+            width={36}
+            height={36}
+            className="h-9 w-9 rounded-lg object-cover"
+          />
           <span className="text-lg font-bold text-white">{SITE_NAME}</span>
         </Link>
 
@@ -70,6 +75,11 @@ export function Navbar() {
               <Link href="/my-rides">
                 <Button variant="ghost" size="sm" className="text-white/70 hover:text-white hover:bg-white/10">
                   My Rides
+                </Button>
+              </Link>
+              <Link href="/account">
+                <Button variant="ghost" size="sm" className="text-white/70 hover:text-white hover:bg-white/10">
+                  Account
                 </Button>
               </Link>
               <Button
@@ -144,6 +154,11 @@ export function Navbar() {
                 <Link href="/my-rides" onClick={() => setMobileOpen(false)}>
                   <Button variant="ghost" className="w-full text-white/70 hover:text-white hover:bg-white/10">
                     My Rides
+                  </Button>
+                </Link>
+                <Link href="/account" onClick={() => setMobileOpen(false)}>
+                  <Button variant="ghost" className="w-full text-white/70 hover:text-white hover:bg-white/10">
+                    Account
                   </Button>
                 </Link>
                 <Button

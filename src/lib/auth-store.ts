@@ -9,6 +9,8 @@ export interface AuthUser {
   email: string;
   phone?: string;
   role: UserRole;
+  photo_url?: string;
+  bio?: string;
 }
 
 interface AuthState {
@@ -16,6 +18,8 @@ interface AuthState {
   loading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
+  updateProfile: (updates: Partial<AuthUser>) => void;
+  changePassword: (currentPassword: string, newPassword: string) => { success: boolean; error?: string };
   isAdmin: boolean;
   isDriver: boolean;
 }
@@ -101,6 +105,8 @@ const AuthContext = createContext<AuthState>({
   loading: true,
   login: async () => ({ success: false }),
   logout: () => {},
+  updateProfile: () => {},
+  changePassword: () => ({ success: false }),
   isAdmin: false,
   isDriver: false,
 });
@@ -172,11 +178,47 @@ export function useAuthProvider(): AuthState {
     localStorage.removeItem(STORAGE_KEY);
   }, []);
 
+  const updateProfile = useCallback((updates: Partial<AuthUser>) => {
+    if (!user) return;
+    const updated = { ...user, ...updates };
+    setUser(updated);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    updateUserInDB(user.email, updates);
+    // If email changed, update the key in DB
+    if (updates.email && updates.email !== user.email) {
+      const raw = localStorage.getItem(USERS_DB_KEY);
+      if (raw) {
+        const users = JSON.parse(raw);
+        const idx = users.findIndex((u: AuthUser) => u.email === user.email);
+        if (idx >= 0) {
+          users[idx] = { ...users[idx], ...updates };
+          localStorage.setItem(USERS_DB_KEY, JSON.stringify(users));
+        }
+      }
+    }
+  }, [user]);
+
+  const changePassword = useCallback((currentPassword: string, newPassword: string) => {
+    if (!user) return { success: false, error: "Not logged in" };
+    const raw = localStorage.getItem(USERS_DB_KEY);
+    if (!raw) return { success: false, error: "User database not found" };
+    const users = JSON.parse(raw);
+    const idx = users.findIndex((u: AuthUser) => u.email === user.email);
+    if (idx < 0) return { success: false, error: "User not found" };
+    if (users[idx].password !== currentPassword) return { success: false, error: "Current password is incorrect" };
+    if (newPassword.length < 6) return { success: false, error: "New password must be at least 6 characters" };
+    users[idx].password = newPassword;
+    localStorage.setItem(USERS_DB_KEY, JSON.stringify(users));
+    return { success: true };
+  }, [user]);
+
   return {
     user,
     loading,
     login,
     logout,
+    updateProfile,
+    changePassword,
     isAdmin: user?.role === "admin",
     isDriver: user?.role === "driver",
   };

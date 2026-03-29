@@ -99,15 +99,18 @@ export const mockBookings: Booking[] = [
     id: "b1", user_id: "u1", ride_slot_id: "rs1", num_passengers: 1,
     status: "confirmed", total_price_cents: 3000,
     stripe_payment_intent_id: "pi_mock_1", created_at: "2026-03-20T10:00:00Z",
+    rider_name: "Tyler Reed", rider_phone: "9795559001", rider_email: "tyler@tamu.edu",
   },
   {
     id: "b2", user_id: "u2", ride_slot_id: "rs2", num_passengers: 3,
     status: "confirmed", total_price_cents: 9000,
     stripe_payment_intent_id: "pi_mock_2", created_at: "2026-03-21T14:00:00Z",
+    rider_name: "Ashley Kim", rider_phone: "9795559002", rider_email: "ashley@tamu.edu",
   },
   {
     id: "b3", user_id: "u3", ride_slot_id: "rs2", num_passengers: 5,
     status: "confirmed", total_price_cents: 15000,
     stripe_payment_intent_id: "pi_mock_3", created_at: "2026-03-22T09:00:00Z",
+    rider_name: "Marcus Johnson", rider_phone: "9795559003", rider_email: "marcus@tamu.edu",
   },
 ];
