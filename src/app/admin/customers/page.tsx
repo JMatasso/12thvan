@@ -114,8 +114,12 @@ export default function CustomersPage() {
             <Card key={c.user.id} className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-maroon/10 text-sm font-bold text-maroon">
-                    {c.user.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-maroon/10 text-sm font-bold text-maroon overflow-hidden flex-shrink-0">
+                    {c.user.photo_url ? (
+                      <img src={c.user.photo_url} alt={c.user.name} className="h-full w-full object-cover" />
+                    ) : (
+                      c.user.name.split(" ").map((n) => n[0]).join("").slice(0, 2)
+                    )}
                   </div>
                   <div>
                     <p className="font-bold">{c.user.name}</p>

@@ -50,8 +50,10 @@ export default function AdminDriversPage() {
             <Card key={driver.id} className="p-5">
               <div className="flex items-start justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-maroon/10 text-lg font-bold text-maroon">
-                    {driver.name.split(" ").map((n) => n[0]).join("")}
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-maroon/10 text-lg font-bold text-maroon overflow-hidden flex-shrink-0">
+                    {driver.photo_url ? (
+                      <img src={driver.photo_url} alt={driver.name} className="h-full w-full object-cover" />
+                    ) : driver.name.split(" ").map((n) => n[0]).join("")}
                   </div>
                   <div>
                     <p className="font-bold text-lg">{driver.name}</p>

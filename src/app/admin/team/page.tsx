@@ -85,8 +85,12 @@ export default function TeamPage() {
             <Card key={u.email} className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-maroon/10">
-                    <RoleIcon className="h-5 w-5 text-maroon" />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-maroon/10 overflow-hidden flex-shrink-0">
+                    {u.photo_url ? (
+                      <img src={u.photo_url} alt={u.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <RoleIcon className="h-5 w-5 text-maroon" />
+                    )}
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
