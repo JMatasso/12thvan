@@ -1,7 +1,11 @@
 import { NextRequest } from "next/server";
-import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+function getResend() {
+  const key = process.env.RESEND_API_KEY;
+  if (!key || key.startsWith("your_")) return null;
+  const { Resend } = require("resend");
+  return new Resend(key);
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -110,9 +114,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const hasResend = process.env.RESEND_API_KEY && !process.env.RESEND_API_KEY.startsWith("your_");
+    const resend = getResend();
 
-    if (hasResend) {
+    if (resend) {
       await resend.emails.send({
         from: "12th Van <onboarding@resend.dev>",
         to: emails,
