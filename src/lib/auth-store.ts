@@ -50,9 +50,13 @@ async function fetchUserProfile(authId: string): Promise<AuthUser | null> {
     .from("users")
     .select("*")
     .eq("auth_id", authId)
-    .single();
+    .maybeSingle();
 
-  if (error || !data) return null;
+  if (error) {
+    console.error("Failed to fetch user profile:", error.message);
+    return null;
+  }
+  if (!data) return null;
 
   return {
     id: data.id,
@@ -74,10 +78,14 @@ export function useAuthProvider(): AuthState {
     let mounted = true;
 
     async function init() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user && mounted) {
-        const profile = await fetchUserProfile(session.user.id);
-        if (mounted) setUser(profile);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user && mounted) {
+          const profile = await fetchUserProfile(session.user.id);
+          if (mounted) setUser(profile);
+        }
+      } catch (err) {
+        console.error("Auth init error:", err);
       }
       if (mounted) setLoading(false);
     }
@@ -87,9 +95,15 @@ export function useAuthProvider(): AuthState {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         const profile = await fetchUserProfile(session.user.id);
-        if (mounted) setUser(profile);
+        if (mounted) {
+          setUser(profile);
+          setLoading(false);
+        }
       } else {
-        if (mounted) setUser(null);
+        if (mounted) {
+          setUser(null);
+          setLoading(false);
+        }
       }
     });
 
@@ -115,15 +129,25 @@ export function useAuthProvider(): AuthState {
     if (!authData.user) return { success: false, error: "Registration failed" };
 
     // Create the user profile in our users table
-    const { error: profileError } = await supabase.from("users").insert({
-      auth_id: authData.user.id,
-      name,
-      email,
-      phone: phone || null,
-      role: "rider",
-    });
-
-    if (profileError) return { success: false, error: profileError.message };
+    // Use the service client via API to bypass RLS for new user creation
+    try {
+      const res = await fetch("/api/auth/create-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          auth_id: authData.user.id,
+          name,
+          email,
+          phone: phone || null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        return { success: false, error: data.error || "Failed to create profile" };
+      }
+    } catch {
+      return { success: false, error: "Failed to create profile" };
+    }
 
     return { success: true };
   }, []);

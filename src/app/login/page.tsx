@@ -38,7 +38,13 @@ export default function LoginPage() {
 
       const result = await register(name, email, password, phone);
       if (result.success) {
-        setSuccess("Account created! Check your email to verify, then log in.");
+        // Auto-login after registration
+        const loginResult = await login(email, password);
+        if (loginResult.success) {
+          router.push("/my-rides");
+          return;
+        }
+        setSuccess("Account created! You can now log in.");
         setMode("login");
       } else {
         setError(result.error || "Registration failed");
@@ -46,10 +52,7 @@ export default function LoginPage() {
     } else {
       const result = await login(email, password);
       if (result.success) {
-        // Give auth state a moment to settle, then redirect
-        setTimeout(() => {
-          router.push("/my-rides");
-        }, 500);
+        router.push("/my-rides");
         return;
       } else {
         setError(result.error || "Invalid email or password");
