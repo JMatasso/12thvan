@@ -44,6 +44,11 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
+      if (phone.replace(/\D/g, "").length < 10) {
+        setError("Valid phone number is required");
+        setLoading(false);
+        return;
+      }
 
       const result = await register(name, email, password, phone);
       if (result.success) {
@@ -130,7 +135,7 @@ export default function LoginPage() {
               {mode === "register" && (
                 <Input
                   id="phone"
-                  label="Phone (optional)"
+                  label="Phone"
                   type="tel"
                   placeholder="(979) 555-1234"
                   value={phone}

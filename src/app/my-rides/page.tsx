@@ -202,7 +202,7 @@ export default function MyRidesPage() {
               <p className="font-bold text-foreground">
                 {booking.ride_slot?.direction === "to_snook"
                   ? "To Chilifest"
-                  : "To College Station"}
+                  : "From Chilifest"}
               </p>
               <p className="text-sm text-muted-foreground">
                 {booking.num_passengers} passenger{booking.num_passengers > 1 ? "s" : ""}
@@ -214,12 +214,14 @@ export default function MyRidesPage() {
             variant={
               booking.status === "confirmed"
                 ? "success"
-                : booking.status === "cancelled"
+                : booking.status === "pending"
+                ? "warning"
+                : booking.status === "cancelled" || booking.status === "denied"
                 ? "danger"
                 : "muted"
             }
           >
-            {booking.status}
+            {booking.status === "pending" ? "Pending Approval" : booking.status}
           </Badge>
         </div>
 

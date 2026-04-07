@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
     const sb = getServiceClient();
 
-    // Look up the ride slot to get pricing
+    // Look up the ride slot
     const { data: slot, error: slotError } = await sb
       .from("ride_slots")
       .select("*")
@@ -57,19 +57,9 @@ export async function POST(request: NextRequest) {
       user = newUser;
     }
 
-    // Atomically book seats
-    const { data: seatsOk, error: seatsError } = await sb.rpc("book_seats", {
-      p_ride_slot_id: ride_slot_id,
-      p_num_passengers: num_passengers,
-    });
-
-    if (seatsError || !seatsOk) {
-      return Response.json({ error: "Not enough seats available" }, { status: 400 });
-    }
-
     const totalPriceCents = slot.price_cents * num_passengers;
 
-    // Create the booking
+    // Create the booking as PENDING (admin must confirm)
     const { data: booking, error: bookingError } = await sb
       .from("bookings")
       .insert({
@@ -80,17 +70,12 @@ export async function POST(request: NextRequest) {
         rider_name: name,
         rider_email: email,
         rider_phone: phone,
-        status: "confirmed",
+        status: "pending",
       })
       .select()
       .single();
 
     if (bookingError) {
-      // Release seats on failure
-      await sb.rpc("release_seats", {
-        p_ride_slot_id: ride_slot_id,
-        p_num_passengers: num_passengers,
-      });
       return Response.json({ error: "Failed to create booking" }, { status: 500 });
     }
 
@@ -107,24 +92,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Send confirmation email
-    try {
-      await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/email/confirmation`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          booking,
-          rideSlot: slot,
-          friends: validFriends,
-        }),
-      });
-    } catch {
-      console.error("Failed to send confirmation email, booking still created");
-    }
-
     return Response.json({
       booking_id: booking.id,
-      status: "confirmed",
+      status: "pending",
       booking: {
         ...booking,
         ride_slot: slot,
@@ -146,11 +116,7 @@ export async function GET(request: NextRequest) {
       .from("bookings")
       .select(`
         *,
-        ride_slot:ride_slots(
-          *,
-          vehicle:vehicles(*),
-          driver:users!ride_slots_driver_id_fkey(id, name, phone, photo_url)
-        ),
+        ride_slot:ride_slots(*),
         friends:booking_friends(*)
       `)
       .eq("user_id", userId)
@@ -172,4 +138,58 @@ export async function GET(request: NextRequest) {
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
   return Response.json({ bookings: data });
+}
+
+// Admin: confirm or deny a booking
+export async function PATCH(request: NextRequest) {
+  try {
+    const { booking_id, action } = await request.json();
+
+    if (!booking_id || !["confirm", "deny"].includes(action)) {
+      return Response.json({ error: "Invalid request" }, { status: 400 });
+    }
+
+    const sb = getServiceClient();
+
+    if (action === "confirm") {
+      // Get the booking to know how many seats to book
+      const { data: booking } = await sb
+        .from("bookings")
+        .select("*")
+        .eq("id", booking_id)
+        .single();
+
+      if (!booking) return Response.json({ error: "Booking not found" }, { status: 404 });
+      if (booking.status !== "pending") return Response.json({ error: "Booking is not pending" }, { status: 400 });
+
+      // Book the seats atomically
+      const { data: seatsOk, error: seatsError } = await sb.rpc("book_seats", {
+        p_ride_slot_id: booking.ride_slot_id,
+        p_num_passengers: booking.num_passengers,
+      });
+
+      if (seatsError || !seatsOk) {
+        return Response.json({ error: "Not enough seats available" }, { status: 400 });
+      }
+
+      // Confirm the booking
+      await sb
+        .from("bookings")
+        .update({ status: "confirmed" })
+        .eq("id", booking_id);
+
+      return Response.json({ success: true, status: "confirmed" });
+    } else {
+      // Deny the booking
+      await sb
+        .from("bookings")
+        .update({ status: "denied" })
+        .eq("id", booking_id);
+
+      return Response.json({ success: true, status: "denied" });
+    }
+  } catch (error) {
+    console.error("Booking action error:", error);
+    return Response.json({ error: "Failed to update booking" }, { status: 500 });
+  }
 }

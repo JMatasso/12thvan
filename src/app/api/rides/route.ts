@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import { rideSlotSchema } from "@/lib/validators";
 import { getServiceClient } from "@/lib/supabase";
 
 export async function GET() {
@@ -7,11 +6,7 @@ export async function GET() {
 
   const { data, error } = await sb
     .from("ride_slots")
-    .select(`
-      *,
-      vehicle:vehicles(*),
-      driver:users!ride_slots_driver_id_fkey(id, name, phone, photo_url)
-    `)
+    .select("*")
     .in("status", ["open", "full"])
     .order("departure_time", { ascending: true });
 
@@ -25,13 +20,11 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const parsed = rideSlotSchema.safeParse(body);
 
-    if (!parsed.success) {
-      return Response.json(
-        { error: "Invalid ride slot data", details: parsed.error.flatten() },
-        { status: 400 }
-      );
+    const { direction, departure_time, pickup_location, dropoff_location, capacity, price_cents } = body;
+
+    if (!direction || !departure_time || !pickup_location || !dropoff_location || !capacity) {
+      return Response.json({ error: "Missing required fields" }, { status: 400 });
     }
 
     const sb = getServiceClient();
@@ -39,9 +32,16 @@ export async function POST(request: NextRequest) {
     const { data, error } = await sb
       .from("ride_slots")
       .insert({
-        ...parsed.data,
+        direction,
+        departure_time,
+        pickup_location,
+        dropoff_location,
+        capacity,
+        price_cents: price_cents || 3000,
         booked_count: 0,
         status: "open",
+        vehicle_id: null,
+        driver_id: null,
       })
       .select()
       .single();

@@ -1,7 +1,7 @@
 export type UserRole = "rider" | "driver" | "admin";
 export type Direction = "to_snook" | "to_cstat";
 export type RideStatus = "open" | "full" | "departed" | "completed" | "cancelled";
-export type BookingStatus = "confirmed" | "cancelled" | "completed" | "no_show";
+export type BookingStatus = "pending" | "confirmed" | "denied" | "cancelled" | "completed" | "no_show";
 
 export interface User {
   id: string;

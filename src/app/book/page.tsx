@@ -9,11 +9,10 @@ import { BookingForm } from "@/components/booking/booking-form";
 import { Button } from "@/components/ui/button";
 import { cn, formatDate, formatTime, formatCents } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-store";
-import { Calendar, Clock, MapPin, Users, Banknote, CheckCircle } from "lucide-react";
+import { Calendar, Clock, MapPin, Users, Banknote, ClockIcon } from "lucide-react";
 import type { RideSlot, BookingFormData, Booking } from "@/lib/types";
 
 type DayFilter = "all" | "friday" | "saturday";
-type DirFilter = "all" | "to_snook" | "to_cstat";
 
 export default function BookPage() {
   const { user, loading: authLoading } = useAuth();
@@ -21,7 +20,6 @@ export default function BookPage() {
   const [loadingRides, setLoadingRides] = useState(true);
   const [selectedSlot, setSelectedSlot] = useState<RideSlot | null>(null);
   const [dayFilter, setDayFilter] = useState<DayFilter>("all");
-  const [dirFilter, setDirFilter] = useState<DirFilter>("all");
   const [confirmedBooking, setConfirmedBooking] = useState<Booking | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [bookingError, setBookingError] = useState("");
@@ -47,10 +45,9 @@ export default function BookPage() {
         return false;
       if (dayFilter === "saturday" && !slot.departure_time.includes("04-11") && !slot.departure_time.includes("04-12"))
         return false;
-      if (dirFilter !== "all" && slot.direction !== dirFilter) return false;
       return true;
     });
-  }, [rides, dayFilter, dirFilter]);
+  }, [rides, dayFilter]);
 
   async function handleBookingSubmit(data: BookingFormData) {
     setSubmitting(true);
@@ -80,7 +77,7 @@ export default function BookPage() {
     }
   }
 
-  // Confirmation screen
+  // Confirmation screen — booking is PENDING
   if (confirmedBooking) {
     const slot = confirmedBooking.ride_slot || selectedSlot;
     const friends = confirmedBooking.friends || [];
@@ -91,16 +88,15 @@ export default function BookPage() {
         <main className="flex flex-1 items-center justify-center pt-24 pb-16 px-4">
           <div className="w-full max-w-md">
             <div className="text-center">
-              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-success/10">
-                <CheckCircle className="h-10 w-10 text-success" />
+              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-amber-100">
+                <ClockIcon className="h-10 w-10 text-amber-600" />
               </div>
-              <h1 className="mt-6 text-2xl font-bold">Booking Confirmed!</h1>
+              <h1 className="mt-6 text-2xl font-bold">Request Submitted!</h1>
               <p className="mt-2 text-muted-foreground">
-                Your ride is reserved. You can view this anytime in My Rides.
+                Your ride request is pending approval. We&apos;ll confirm your booking shortly.
               </p>
             </div>
 
-            {/* Ride details */}
             {slot && (
               <div className="mt-6 rounded-xl border border-border p-5">
                 <div className="flex items-center gap-3 mb-4">
@@ -109,10 +105,10 @@ export default function BookPage() {
                   </div>
                   <div>
                     <p className="font-bold text-lg">
-                      {slot.direction === "to_snook" ? "To Chilifest" : "To College Station"}
+                      {slot.direction === "to_snook" ? "To Chilifest" : "From Chilifest"}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {confirmedBooking.num_passengers} passenger{confirmedBooking.num_passengers > 1 ? "s" : ""}
+                      {confirmedBooking.num_passengers} seat{confirmedBooking.num_passengers > 1 ? "s" : ""} requested
                     </p>
                   </div>
                 </div>
@@ -130,10 +126,6 @@ export default function BookPage() {
                     <MapPin className="h-4 w-4 flex-shrink-0" />
                     <span>Pickup: {slot.pickup_location}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <MapPin className="h-4 w-4 flex-shrink-0" />
-                    <span>Drop-off: {slot.dropoff_location}</span>
-                  </div>
                   {friends.length > 0 && (
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Users className="h-4 w-4 flex-shrink-0" />
@@ -144,18 +136,20 @@ export default function BookPage() {
 
                 <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
                   <span className="text-2xl font-black">{formatCents(confirmedBooking.total_price_cents)}</span>
-                  <span className="text-xs text-muted-foreground">Booking #{confirmedBooking.id.slice(0, 8)}</span>
+                  <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded-full font-medium">
+                    <ClockIcon className="h-3 w-3" />
+                    Pending approval
+                  </span>
                 </div>
               </div>
             )}
 
-            {/* Payment reminder */}
             <div className="mt-4 flex items-start gap-3 rounded-xl bg-amber-50 border border-amber-200 p-4">
               <Banknote className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-semibold text-amber-800">Pay in person at pickup</p>
                 <p className="text-xs text-amber-700 mt-1">
-                  Bring cash or tap-to-pay. Your driver will collect payment when you arrive.
+                  Once confirmed, bring cash or tap-to-pay. Your driver will collect payment when you arrive.
                 </p>
               </div>
             </div>
@@ -238,10 +232,10 @@ export default function BookPage() {
         <div className="mx-auto max-w-4xl px-4 sm:px-6">
           <h1 className="text-3xl font-bold text-foreground">Book a Ride</h1>
           <p className="mt-2 text-muted-foreground">
-            Choose your ride to or from Chilifest 2026.
+            Choose your ride to or from Chilifest 2026. Bookings are confirmed by our team.
           </p>
 
-          {/* Filters */}
+          {/* Day filter only */}
           <div className="mt-8 flex flex-wrap gap-3">
             <div className="flex gap-1 rounded-xl bg-muted p-1">
               {(["all", "friday", "saturday"] as DayFilter[]).map((day) => (
@@ -259,29 +253,6 @@ export default function BookPage() {
                 </button>
               ))}
             </div>
-
-            <div className="flex gap-1 rounded-xl bg-muted p-1">
-              {(
-                [
-                  { value: "all", label: "Both Directions" },
-                  { value: "to_snook", label: "→ Chilifest" },
-                  { value: "to_cstat", label: "→ College Station" },
-                ] as { value: DirFilter; label: string }[]
-              ).map((dir) => (
-                <button
-                  key={dir.value}
-                  onClick={() => setDirFilter(dir.value)}
-                  className={cn(
-                    "rounded-lg px-4 py-2 text-sm font-medium transition-all",
-                    dirFilter === dir.value
-                      ? "bg-white text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {dir.label}
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Ride slots */}
@@ -292,7 +263,7 @@ export default function BookPage() {
               </div>
             ) : filteredSlots.length === 0 ? (
               <div className="py-16 text-center text-muted-foreground">
-                No rides match your filters. Try a different day or direction.
+                No rides available yet. Check back soon!
               </div>
             ) : (
               filteredSlots.map((slot) => (

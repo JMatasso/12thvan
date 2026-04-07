@@ -158,6 +158,7 @@ function AddPersonForm({ onAdded }: { onAdded: () => void }) {
     name: "",
     email: "",
     phone: "",
+    password: "",
     role: "admin" as UserRole,
   });
   const [error, setError] = useState("");
@@ -167,21 +168,36 @@ function AddPersonForm({ onAdded }: { onAdded: () => void }) {
     e.preventDefault();
     setError("");
 
-    if (!form.name || !form.email) {
-      setError("Name and email are required");
+    if (!form.name || !form.email || !form.password) {
+      setError("Name, email, and password are required");
+      return;
+    }
+    if (form.password.length < 6) {
+      setError("Password must be at least 6 characters");
       return;
     }
 
     setLoading(true);
-    const { error: insertError } = await supabase.from("users").insert({
-      name: form.name,
-      email: form.email,
-      phone: form.phone || null,
-      role: form.role,
-    });
-
-    if (insertError) {
-      setError(insertError.message);
+    try {
+      const res = await fetch("/api/auth/create-admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          email: form.email,
+          phone: form.phone || null,
+          password: form.password,
+          role: form.role,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to create account");
+        setLoading(false);
+        return;
+      }
+    } catch {
+      setError("Failed to create account");
       setLoading(false);
       return;
     }
@@ -195,6 +211,7 @@ function AddPersonForm({ onAdded }: { onAdded: () => void }) {
       <Input id="name" label="Name" placeholder="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
       <Input id="email" label="Email" type="email" placeholder="user@12thvan.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
       <Input id="phone" label="Phone" type="tel" placeholder="(979) 555-1234" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+      <Input id="password" label="Password" type="password" placeholder="Min 6 characters" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
       <Select
         id="role"
         label="Role"
