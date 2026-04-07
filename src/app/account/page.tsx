@@ -72,7 +72,6 @@ export default function AccountPage() {
     reader.readAsDataURL(file);
   }
 
-  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
@@ -106,19 +105,18 @@ export default function AccountPage() {
     setTimeout(() => setSaved(false), 2000);
   }
 
-  function handleChangePassword(e: React.FormEvent) {
+  async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault();
     setPasswordError("");
     if (newPassword !== confirmPassword) {
       setPasswordError("New passwords don't match");
       return;
     }
-    const result = changePassword(currentPassword, newPassword);
+    const result = await changePassword(newPassword);
     if (!result.success) {
       setPasswordError(result.error || "Failed to change password");
       return;
     }
-    setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
     setPasswordSaved(true);
@@ -277,7 +275,6 @@ export default function AccountPage() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleChangePassword} className="flex flex-col gap-4">
-                <Input id="current-password" label="Current Password" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="••••••" />
                 <Input id="new-password" label="New Password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Min 6 characters" />
                 <Input id="confirm-password" label="Confirm New Password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••" />
                 {passwordError && <p className="text-sm text-danger">{passwordError}</p>}

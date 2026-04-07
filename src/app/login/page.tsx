@@ -9,32 +9,51 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-store";
 
+type Mode = "login" | "register";
+
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, register } = useAuth();
+  const [mode, setMode] = useState<Mode>("login");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setSuccess("");
     setLoading(true);
 
-    const result = await login(email, password);
+    if (mode === "register") {
+      if (name.length < 2) {
+        setError("Name must be at least 2 characters");
+        setLoading(false);
+        return;
+      }
 
-    if (result.success) {
-      // Redirect based on role — read from the auth store after login
-      const stored = localStorage.getItem("12thvan_auth");
-      if (stored) {
-        const user = JSON.parse(stored);
-        if (user.role === "admin") router.push("/admin");
-        else if (user.role === "driver") router.push("/driver");
-        else router.push("/my-rides");
+      const result = await register(name, email, password, phone);
+      if (result.success) {
+        setSuccess("Account created! Check your email to verify, then log in.");
+        setMode("login");
+      } else {
+        setError(result.error || "Registration failed");
       }
     } else {
-      setError(result.error || "Invalid email or password");
+      const result = await login(email, password);
+      if (result.success) {
+        // Give auth state a moment to settle, then redirect
+        setTimeout(() => {
+          router.push("/my-rides");
+        }, 500);
+        return;
+      } else {
+        setError(result.error || "Invalid email or password");
+      }
     }
 
     setLoading(false);
@@ -49,13 +68,26 @@ export default function LoginPage() {
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-maroon text-white font-black text-lg">
               12
             </div>
-            <CardTitle className="mt-4">Welcome back</CardTitle>
+            <CardTitle className="mt-4">
+              {mode === "login" ? "Welcome back" : "Create your account"}
+            </CardTitle>
             <CardDescription>
-              Log in to manage your rides or access the admin portal
+              {mode === "login"
+                ? "Log in to view and manage your rides"
+                : "Sign up to book rides to Chilifest"}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              {mode === "register" && (
+                <Input
+                  id="name"
+                  label="Full Name"
+                  placeholder="Your full name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              )}
               <Input
                 id="email"
                 label="Email"
@@ -64,6 +96,16 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
+              {mode === "register" && (
+                <Input
+                  id="phone"
+                  label="Phone (optional)"
+                  type="tel"
+                  placeholder="(979) 555-1234"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
+              )}
               <Input
                 id="password"
                 label="Password"
@@ -73,20 +115,40 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
               />
 
-              {error && (
-                <p className="text-sm text-danger">{error}</p>
-              )}
+              {error && <p className="text-sm text-danger">{error}</p>}
+              {success && <p className="text-sm text-success">{success}</p>}
 
               <Button type="submit" disabled={loading} className="w-full mt-2">
-                {loading ? "Signing in..." : "Sign In"}
+                {loading
+                  ? (mode === "login" ? "Signing in..." : "Creating account...")
+                  : (mode === "login" ? "Sign In" : "Create Account")}
               </Button>
 
-              <div className="mt-4 rounded-xl bg-muted p-4 text-xs text-muted-foreground">
-                <p className="font-semibold text-foreground mb-1">Demo Accounts:</p>
-                <p>Admin: admin@12thvan.com / admin123</p>
-                <p>Driver: jake@12thvan.com / driver123</p>
-                <p>New rider: any email / any 6+ char password</p>
-              </div>
+              <p className="text-center text-sm text-muted-foreground">
+                {mode === "login" ? (
+                  <>
+                    Don&apos;t have an account?{" "}
+                    <button
+                      type="button"
+                      onClick={() => { setMode("register"); setError(""); setSuccess(""); }}
+                      className="font-medium text-maroon underline hover:text-maroon-dark"
+                    >
+                      Sign up
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    Already have an account?{" "}
+                    <button
+                      type="button"
+                      onClick={() => { setMode("login"); setError(""); setSuccess(""); }}
+                      className="font-medium text-maroon underline hover:text-maroon-dark"
+                    >
+                      Log in
+                    </button>
+                  </>
+                )}
+              </p>
             </form>
           </CardContent>
         </Card>

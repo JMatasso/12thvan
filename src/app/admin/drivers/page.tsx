@@ -1,30 +1,48 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Phone, Mail, Car, Clock, Users } from "lucide-react";
-import { getAllUsers, addUserToDB, type AuthUser } from "@/lib/auth-store";
+import { Plus, Phone, Mail, Car, Clock } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 import { useRides, useVehicles, useBookings } from "@/lib/data-store";
 import { formatDate, formatTime } from "@/lib/utils";
-import type { Vehicle } from "@/lib/types";
+import type { AuthUser } from "@/lib/auth-store";
+import type { Vehicle, UserRole } from "@/lib/types";
 
 export default function AdminDriversPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [showAddVehicle, setShowAddVehicle] = useState<string | null>(null);
-  const drivers = useMemo(() => getAllUsers().filter((u) => u.role === "driver"), []);
+  const [drivers, setDrivers] = useState<AuthUser[]>([]);
   const { rides } = useRides();
   const { vehicles, addVehicle } = useVehicles();
   const { bookings } = useBookings();
-  const [, forceUpdate] = useState(0);
 
-  function refreshDrivers() {
-    forceUpdate((n) => n + 1);
+  async function fetchDrivers() {
+    const { data } = await supabase
+      .from("users")
+      .select("*")
+      .eq("role", "driver")
+      .order("name");
+    if (data) {
+      setDrivers(data.map((u) => ({
+        id: u.id,
+        auth_id: u.auth_id,
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        role: u.role as UserRole,
+        photo_url: u.photo_url,
+        bio: u.bio,
+      })));
+    }
   }
+
+  useEffect(() => { fetchDrivers(); }, []);
 
   return (
     <div>
@@ -71,7 +89,6 @@ export default function AdminDriversPage() {
                 </div>
               </div>
 
-              {/* Vehicles */}
               <div className="mt-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold uppercase text-muted-foreground">Vehicles</p>
@@ -90,7 +107,6 @@ export default function AdminDriversPage() {
                 </div>
               </div>
 
-              {/* Upcoming rides */}
               {upcomingRides.length > 0 && (
                 <div className="mt-4">
                   <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">Upcoming Schedule</p>
@@ -110,15 +126,13 @@ export default function AdminDriversPage() {
         })}
       </div>
 
-      {/* Add driver dialog */}
       <Dialog open={showAdd} onOpenChange={setShowAdd}>
         <DialogContent>
           <DialogHeader><DialogTitle>Add New Driver</DialogTitle></DialogHeader>
-          <AddDriverForm onAdded={() => { refreshDrivers(); setShowAdd(false); }} />
+          <AddDriverForm onAdded={() => { fetchDrivers(); setShowAdd(false); }} />
         </DialogContent>
       </Dialog>
 
-      {/* Add vehicle dialog */}
       <Dialog open={!!showAddVehicle} onOpenChange={() => setShowAddVehicle(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Add Vehicle</DialogTitle></DialogHeader>
@@ -130,25 +144,32 @@ export default function AdminDriversPage() {
 }
 
 function AddDriverForm({ onAdded }: { onAdded: () => void }) {
-  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "driver123" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "" });
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name || !form.email) { setError("Name and email required"); return; }
-    const success = addUserToDB({ id: `driver-${Date.now()}`, name: form.name, email: form.email, phone: form.phone, role: "driver", password: form.password });
-    if (!success) { setError("Email already exists"); return; }
+    setLoading(true);
+    const { error: insertError } = await supabase.from("users").insert({
+      name: form.name,
+      email: form.email,
+      phone: form.phone || null,
+      role: "driver",
+    });
+    if (insertError) { setError(insertError.message); setLoading(false); return; }
+    setLoading(false);
     onAdded();
   }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-4">
-      <Input id="name" label="Name" placeholder="Jane Doe" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-      <Input id="email" label="Email" type="email" placeholder="jane@12thvan.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+      <Input id="name" label="Name" placeholder="Driver name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+      <Input id="email" label="Email" type="email" placeholder="driver@12thvan.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
       <Input id="phone" label="Phone" type="tel" placeholder="(979) 555-1234" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-      <Input id="password" label="Password" type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
       {error && <p className="text-sm text-danger">{error}</p>}
-      <Button type="submit">Add Driver</Button>
+      <Button type="submit" disabled={loading}>{loading ? "Adding..." : "Add Driver"}</Button>
     </form>
   );
 }

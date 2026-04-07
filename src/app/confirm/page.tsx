@@ -1,18 +1,14 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import Link from "next/link";
 import { Navbar } from "@/components/landing/navbar";
 import { Footer } from "@/components/landing/footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle, MessageCircle, MapPin, Clock } from "lucide-react";
+import { CheckCircle, MapPin, Clock, Banknote } from "lucide-react";
 
 function ConfirmContent() {
-  const searchParams = useSearchParams();
-  const sessionId = searchParams.get("session_id");
-
   return (
     <div className="mx-auto max-w-lg px-4">
       <Card className="text-center p-8">
@@ -26,32 +22,38 @@ function ConfirmContent() {
           </h1>
 
           <p className="text-muted-foreground">
-            Your ride to Chilifest is confirmed. Gig &apos;em!
+            Your ride to Chilifest is confirmed. Check your email for the full details.
           </p>
+
+          <div className="w-full rounded-xl bg-amber-50 border border-amber-200 p-4 text-left">
+            <div className="flex items-start gap-2">
+              <Banknote className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-amber-800">Payment is in person</p>
+                <p className="text-sm text-amber-700 mt-1">
+                  Bring <strong>cash or tap-to-pay</strong>. Your driver will collect payment at the pickup location.
+                </p>
+              </div>
+            </div>
+          </div>
 
           <div className="w-full rounded-xl bg-muted p-4 text-left">
             <h3 className="font-semibold text-foreground mb-3">What happens next:</h3>
             <ul className="flex flex-col gap-3 text-sm text-muted-foreground">
               <li className="flex items-start gap-2">
-                <MessageCircle className="h-4 w-4 mt-0.5 text-maroon flex-shrink-0" />
-                You&apos;ll get an SMS with your ride details and driver info
+                <CheckCircle className="h-4 w-4 mt-0.5 text-maroon flex-shrink-0" />
+                You&apos;ll get an email confirmation with your ride details
               </li>
               <li className="flex items-start gap-2">
                 <Clock className="h-4 w-4 mt-0.5 text-maroon flex-shrink-0" />
-                30 minutes before departure, you&apos;ll get a reminder text
+                Show up at the pickup location 5 minutes early
               </li>
               <li className="flex items-start gap-2">
                 <MapPin className="h-4 w-4 mt-0.5 text-maroon flex-shrink-0" />
-                Show up at the pickup location 5 minutes early
+                Have your confirmation email ready to show the driver
               </li>
             </ul>
           </div>
-
-          {sessionId && (
-            <p className="text-xs text-muted-foreground">
-              Confirmation: {sessionId.slice(0, 20)}...
-            </p>
-          )}
 
           <div className="flex gap-3 w-full mt-2">
             <Link href="/book" className="flex-1">

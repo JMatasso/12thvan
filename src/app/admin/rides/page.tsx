@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,8 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Plus, Trash2, Clock, MapPin, Users, Search, Download } from "lucide-react";
 import { formatDate, formatTime, formatCents, spotStatus, spotsRemaining, cn } from "@/lib/utils";
 import { useRides, useVehicles, exportToCSV } from "@/lib/data-store";
-import { getAllUsers } from "@/lib/auth-store";
-import type { RideSlot } from "@/lib/types";
+import { supabase } from "@/lib/supabase";
+import type { AuthUser } from "@/lib/auth-store";
+import type { RideSlot, UserRole } from "@/lib/types";
 
 export default function AdminRidesPage() {
   const { rides, addRide, updateRide, deleteRide } = useRides();
@@ -22,7 +23,18 @@ export default function AdminRidesPage() {
   const [dirFilter, setDirFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const drivers = useMemo(() => getAllUsers().filter((u) => u.role === "driver"), []);
+  const [drivers, setDrivers] = useState<AuthUser[]>([]);
+
+  useEffect(() => {
+    async function fetchDrivers() {
+      const { data } = await supabase.from("users").select("*").eq("role", "driver").order("name");
+      if (data) setDrivers(data.map((u) => ({
+        id: u.id, auth_id: u.auth_id, name: u.name, email: u.email,
+        phone: u.phone, role: u.role as UserRole, photo_url: u.photo_url, bio: u.bio,
+      })));
+    }
+    fetchDrivers();
+  }, []);
 
   const filtered = useMemo(() => {
     return rides.filter((r) => {

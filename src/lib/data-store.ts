@@ -2,8 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { RideSlot, Booking, Vehicle } from "./types";
-import type { AuthUser } from "./auth-store";
-import { mockRideSlots, mockBookings, mockVehicles, mockDrivers } from "./mock-data";
 
 const RIDES_KEY = "12thvan_rides";
 const BOOKINGS_KEY = "12thvan_bookings";
@@ -13,14 +11,13 @@ const COMMS_KEY = "12thvan_comms_log";
 const ANNOUNCEMENT_KEY = "12thvan_announcement";
 const CONFIG_KEY = "12thvan_config";
 
-function loadOrSeed<T>(key: string, seed: T[]): T[] {
-  if (typeof window === "undefined") return seed;
+function load<T>(key: string): T[] {
+  if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(key);
     if (raw) return JSON.parse(raw);
   } catch {}
-  localStorage.setItem(key, JSON.stringify(seed));
-  return seed;
+  return [];
 }
 
 function save<T>(key: string, data: T[]) {
@@ -30,7 +27,7 @@ function save<T>(key: string, data: T[]) {
 // ---- RIDES ----
 export function useRides() {
   const [rides, setRides] = useState<RideSlot[]>([]);
-  useEffect(() => { setRides(loadOrSeed(RIDES_KEY, mockRideSlots)); }, []);
+  useEffect(() => { setRides(load(RIDES_KEY)); }, []);
 
   const persist = useCallback((updated: RideSlot[]) => {
     setRides(updated);
@@ -38,28 +35,28 @@ export function useRides() {
   }, []);
 
   const addRide = useCallback((ride: RideSlot) => {
-    const updated = [...loadOrSeed<RideSlot>(RIDES_KEY, []), ride];
+    const updated = [...load<RideSlot>(RIDES_KEY), ride];
     persist(updated);
   }, [persist]);
 
   const updateRide = useCallback((id: string, changes: Partial<RideSlot>) => {
-    const current = loadOrSeed<RideSlot>(RIDES_KEY, []);
+    const current = load<RideSlot>(RIDES_KEY);
     const updated = current.map((r) => (r.id === id ? { ...r, ...changes } : r));
     persist(updated);
   }, [persist]);
 
   const deleteRide = useCallback((id: string) => {
-    const current = loadOrSeed<RideSlot>(RIDES_KEY, []);
+    const current = load<RideSlot>(RIDES_KEY);
     persist(current.filter((r) => r.id !== id));
   }, [persist]);
 
-  return { rides, addRide, updateRide, deleteRide, refresh: () => setRides(loadOrSeed(RIDES_KEY, mockRideSlots)) };
+  return { rides, addRide, updateRide, deleteRide, refresh: () => setRides(load(RIDES_KEY)) };
 }
 
 // ---- BOOKINGS ----
 export function useBookings() {
   const [bookings, setBookings] = useState<Booking[]>([]);
-  useEffect(() => { setBookings(loadOrSeed(BOOKINGS_KEY, mockBookings)); }, []);
+  useEffect(() => { setBookings(load(BOOKINGS_KEY)); }, []);
 
   const persist = useCallback((updated: Booking[]) => {
     setBookings(updated);
@@ -67,17 +64,17 @@ export function useBookings() {
   }, []);
 
   const addBooking = useCallback((booking: Booking) => {
-    const current = loadOrSeed<Booking>(BOOKINGS_KEY, []);
+    const current = load<Booking>(BOOKINGS_KEY);
     persist([...current, booking]);
   }, [persist]);
 
   const updateBooking = useCallback((id: string, changes: Partial<Booking>) => {
-    const current = loadOrSeed<Booking>(BOOKINGS_KEY, []);
+    const current = load<Booking>(BOOKINGS_KEY);
     persist(current.map((b) => (b.id === id ? { ...b, ...changes } : b)));
   }, [persist]);
 
   const cancelBooking = useCallback((id: string) => {
-    const current = loadOrSeed<Booking>(BOOKINGS_KEY, []);
+    const current = load<Booking>(BOOKINGS_KEY);
     persist(current.map((b) => (b.id === id ? { ...b, status: "cancelled" as const } : b)));
   }, [persist]);
 
@@ -87,7 +84,7 @@ export function useBookings() {
 // ---- VEHICLES ----
 export function useVehicles() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  useEffect(() => { setVehicles(loadOrSeed(VEHICLES_KEY, mockVehicles)); }, []);
+  useEffect(() => { setVehicles(load(VEHICLES_KEY)); }, []);
 
   const persist = useCallback((updated: Vehicle[]) => {
     setVehicles(updated);
@@ -95,12 +92,12 @@ export function useVehicles() {
   }, []);
 
   const addVehicle = useCallback((v: Vehicle) => {
-    const current = loadOrSeed<Vehicle>(VEHICLES_KEY, []);
+    const current = load<Vehicle>(VEHICLES_KEY);
     persist([...current, v]);
   }, [persist]);
 
   const deleteVehicle = useCallback((id: string) => {
-    const current = loadOrSeed<Vehicle>(VEHICLES_KEY, []);
+    const current = load<Vehicle>(VEHICLES_KEY);
     persist(current.filter((v) => v.id !== id));
   }, [persist]);
 
@@ -124,7 +121,7 @@ export interface Incident {
 
 export function useIncidents() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
-  useEffect(() => { setIncidents(loadOrSeed(INCIDENTS_KEY, [])); }, []);
+  useEffect(() => { setIncidents(load(INCIDENTS_KEY)); }, []);
 
   const persist = useCallback((updated: Incident[]) => {
     setIncidents(updated);
@@ -132,11 +129,11 @@ export function useIncidents() {
   }, []);
 
   const addIncident = useCallback((incident: Incident) => {
-    persist([...loadOrSeed<Incident>(INCIDENTS_KEY, []), incident]);
+    persist([...load<Incident>(INCIDENTS_KEY), incident]);
   }, [persist]);
 
   const updateIncident = useCallback((id: string, changes: Partial<Incident>) => {
-    const current = loadOrSeed<Incident>(INCIDENTS_KEY, []);
+    const current = load<Incident>(INCIDENTS_KEY);
     persist(current.map((i) => (i.id === id ? { ...i, ...changes } : i)));
   }, [persist]);
 
@@ -147,7 +144,7 @@ export function useIncidents() {
 export interface CommEntry {
   id: string;
   type: "sms" | "announcement";
-  recipients: string; // "all_riders" | "all_drivers" | specific phone
+  recipients: string;
   message: string;
   sent_at: string;
   sent_by: string;
@@ -155,10 +152,10 @@ export interface CommEntry {
 
 export function useCommsLog() {
   const [log, setLog] = useState<CommEntry[]>([]);
-  useEffect(() => { setLog(loadOrSeed(COMMS_KEY, [])); }, []);
+  useEffect(() => { setLog(load(COMMS_KEY)); }, []);
 
   const addEntry = useCallback((entry: CommEntry) => {
-    const updated = [...loadOrSeed<CommEntry>(COMMS_KEY, []), entry];
+    const updated = [...load<CommEntry>(COMMS_KEY), entry];
     save(COMMS_KEY, updated);
     setLog(updated);
   }, []);

@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback, createContext, useContext } from "react";
+import { supabase } from "./supabase";
 import type { UserRole } from "./types";
 
 export interface AuthUser {
   id: string;
+  auth_id: string;
   name: string;
   email: string;
   phone?: string;
@@ -17,96 +19,22 @@ interface AuthState {
   user: AuthUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
-  updateProfile: (updates: Partial<AuthUser>) => void;
-  changePassword: (currentPassword: string, newPassword: string) => { success: boolean; error?: string };
+  register: (name: string, email: string, password: string, phone?: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
+  updateProfile: (updates: Partial<AuthUser>) => Promise<void>;
+  changePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
   isAdmin: boolean;
   isDriver: boolean;
-}
-
-const STORAGE_KEY = "12thvan_auth";
-
-// In-memory user database (replace with Supabase in production)
-const USERS_DB_KEY = "12thvan_users_db";
-
-function getStoredUsers(): AuthUser[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(USERS_DB_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  // Seed with default admins and drivers
-  const defaults: (AuthUser & { password: string })[] = [
-    { id: "admin-1", name: "Admin", email: "admin@12thvan.com", phone: "9795551111", role: "admin", password: "admin123" },
-    { id: "driver-1", name: "Jake Morrison", email: "jake@12thvan.com", phone: "9795551234", role: "driver", password: "driver123" },
-    { id: "driver-2", name: "Sarah Chen", email: "sarah@12thvan.com", phone: "9795555678", role: "driver", password: "driver123" },
-  ];
-  localStorage.setItem(USERS_DB_KEY, JSON.stringify(defaults));
-  return defaults;
-}
-
-function getStoredPasswords(): Record<string, string> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = localStorage.getItem(USERS_DB_KEY);
-    if (!raw) return {};
-    const users = JSON.parse(raw);
-    const map: Record<string, string> = {};
-    for (const u of users) {
-      if (u.password) map[u.email] = u.password;
-    }
-    return map;
-  } catch {
-    return {};
-  }
-}
-
-export function addUserToDB(user: AuthUser & { password: string }) {
-  const users = getStoredUsers();
-  const existing = users.find((u) => u.email === user.email);
-  if (existing) return false;
-  const allRaw = localStorage.getItem(USERS_DB_KEY);
-  const all = allRaw ? JSON.parse(allRaw) : [];
-  all.push(user);
-  localStorage.setItem(USERS_DB_KEY, JSON.stringify(all));
-  return true;
-}
-
-export function getAllUsers(): (AuthUser & { password?: string })[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(USERS_DB_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function updateUserInDB(email: string, updates: Partial<AuthUser>) {
-  const raw = localStorage.getItem(USERS_DB_KEY);
-  if (!raw) return;
-  const users = JSON.parse(raw);
-  const idx = users.findIndex((u: AuthUser) => u.email === email);
-  if (idx >= 0) {
-    users[idx] = { ...users[idx], ...updates };
-    localStorage.setItem(USERS_DB_KEY, JSON.stringify(users));
-  }
-}
-
-export function removeUserFromDB(email: string) {
-  const raw = localStorage.getItem(USERS_DB_KEY);
-  if (!raw) return;
-  const users = JSON.parse(raw).filter((u: AuthUser) => u.email !== email);
-  localStorage.setItem(USERS_DB_KEY, JSON.stringify(users));
 }
 
 const AuthContext = createContext<AuthState>({
   user: null,
   loading: true,
   login: async () => ({ success: false }),
-  logout: () => {},
-  updateProfile: () => {},
-  changePassword: () => ({ success: false }),
+  register: async () => ({ success: false }),
+  logout: async () => {},
+  updateProfile: async () => {},
+  changePassword: async () => ({ success: false }),
   isAdmin: false,
   isDriver: false,
 });
@@ -117,98 +45,120 @@ export function useAuth() {
 
 export { AuthContext };
 
+async function fetchUserProfile(authId: string): Promise<AuthUser | null> {
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("auth_id", authId)
+    .single();
+
+  if (error || !data) return null;
+
+  return {
+    id: data.id,
+    auth_id: data.auth_id,
+    name: data.name,
+    email: data.email,
+    phone: data.phone,
+    role: data.role as UserRole,
+    photo_url: data.photo_url,
+    bio: data.bio,
+  };
+}
+
 export function useAuthProvider(): AuthState {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        setUser(JSON.parse(stored));
+    let mounted = true;
+
+    async function init() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user && mounted) {
+        const profile = await fetchUserProfile(session.user.id);
+        if (mounted) setUser(profile);
       }
-    } catch {}
-    setLoading(false);
+      if (mounted) setLoading(false);
+    }
+
+    init();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        const profile = await fetchUserProfile(session.user.id);
+        if (mounted) setUser(profile);
+      } else {
+        if (mounted) setUser(null);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    // Initialize users DB if needed
-    getStoredUsers();
-    const passwords = getStoredPasswords();
-
-    const storedPassword = passwords[email];
-
-    if (storedPassword && storedPassword === password) {
-      const allRaw = localStorage.getItem(USERS_DB_KEY);
-      const all = allRaw ? JSON.parse(allRaw) : [];
-      const found = all.find((u: AuthUser) => u.email === email);
-      if (found) {
-        const authUser: AuthUser = {
-          id: found.id,
-          name: found.name,
-          email: found.email,
-          phone: found.phone,
-          role: found.role,
-        };
-        setUser(authUser);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(authUser));
-        return { success: true };
-      }
-    }
-
-    // Allow any email/pass (6+ chars) to register as rider
-    if (email && password.length >= 6 && !storedPassword) {
-      const newUser: AuthUser = {
-        id: `rider-${Date.now()}`,
-        name: email.split("@")[0],
-        email,
-        role: "rider",
-      };
-      addUserToDB({ ...newUser, password });
-      setUser(newUser);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newUser));
-      return { success: true };
-    }
-
-    return { success: false, error: "Invalid email or password" };
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return { success: false, error: error.message };
+    return { success: true };
   }, []);
 
-  const logout = useCallback(() => {
+  const register = useCallback(async (name: string, email: string, password: string, phone?: string) => {
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    if (authError) return { success: false, error: authError.message };
+    if (!authData.user) return { success: false, error: "Registration failed" };
+
+    // Create the user profile in our users table
+    const { error: profileError } = await supabase.from("users").insert({
+      auth_id: authData.user.id,
+      name,
+      email,
+      phone: phone || null,
+      role: "rider",
+    });
+
+    if (profileError) return { success: false, error: profileError.message };
+
+    return { success: true };
+  }, []);
+
+  const logout = useCallback(async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem(STORAGE_KEY);
   }, []);
 
-  const updateProfile = useCallback((updates: Partial<AuthUser>) => {
+  const updateProfile = useCallback(async (updates: Partial<AuthUser>) => {
     if (!user) return;
-    const updated = { ...user, ...updates };
-    setUser(updated);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    updateUserInDB(user.email, updates);
-    // If email changed, update the key in DB
-    if (updates.email && updates.email !== user.email) {
-      const raw = localStorage.getItem(USERS_DB_KEY);
-      if (raw) {
-        const users = JSON.parse(raw);
-        const idx = users.findIndex((u: AuthUser) => u.email === user.email);
-        if (idx >= 0) {
-          users[idx] = { ...users[idx], ...updates };
-          localStorage.setItem(USERS_DB_KEY, JSON.stringify(users));
-        }
-      }
+
+    const dbUpdates: Record<string, unknown> = {};
+    if (updates.name !== undefined) dbUpdates.name = updates.name;
+    if (updates.email !== undefined) dbUpdates.email = updates.email;
+    if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+    if (updates.photo_url !== undefined) dbUpdates.photo_url = updates.photo_url;
+    if (updates.bio !== undefined) dbUpdates.bio = updates.bio;
+
+    const { error } = await supabase
+      .from("users")
+      .update(dbUpdates)
+      .eq("id", user.id);
+
+    if (!error) {
+      setUser({ ...user, ...updates });
     }
   }, [user]);
 
-  const changePassword = useCallback((currentPassword: string, newPassword: string) => {
+  const changePassword = useCallback(async (newPassword: string) => {
     if (!user) return { success: false, error: "Not logged in" };
-    const raw = localStorage.getItem(USERS_DB_KEY);
-    if (!raw) return { success: false, error: "User database not found" };
-    const users = JSON.parse(raw);
-    const idx = users.findIndex((u: AuthUser) => u.email === user.email);
-    if (idx < 0) return { success: false, error: "User not found" };
-    if (users[idx].password !== currentPassword) return { success: false, error: "Current password is incorrect" };
-    if (newPassword.length < 6) return { success: false, error: "New password must be at least 6 characters" };
-    users[idx].password = newPassword;
-    localStorage.setItem(USERS_DB_KEY, JSON.stringify(users));
+    if (newPassword.length < 6) return { success: false, error: "Password must be at least 6 characters" };
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) return { success: false, error: error.message };
     return { success: true };
   }, [user]);
 
@@ -216,6 +166,7 @@ export function useAuthProvider(): AuthState {
     user,
     loading,
     login,
+    register,
     logout,
     updateProfile,
     changePassword,

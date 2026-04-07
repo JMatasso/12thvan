@@ -117,7 +117,7 @@ export default function AdminSettingsPage() {
           <CardContent className="flex flex-col gap-3">
             {[
               { name: "Supabase", env: "NEXT_PUBLIC_SUPABASE_URL" },
-              { name: "Stripe", env: "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY" },
+              { name: "Resend (Email)", env: "RESEND_API_KEY" },
               { name: "Twilio (SMS)", env: "TWILIO_ACCOUNT_SID" },
             ].map((integration) => (
               <div key={integration.name} className="flex items-center justify-between rounded-xl bg-muted/50 p-3">

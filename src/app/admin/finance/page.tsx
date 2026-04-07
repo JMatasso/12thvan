@@ -1,12 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
-import { DollarSign, TrendingUp, ArrowDownRight, Download } from "lucide-react";
+import { DollarSign, TrendingUp, ArrowDownRight, Download, Banknote } from "lucide-react";
 import { StatCard } from "@/components/ui/stat-card";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatCents, formatDate, formatTime } from "@/lib/utils";
+import { formatCents, formatDate } from "@/lib/utils";
 import { useBookings, useRides, exportToCSV } from "@/lib/data-store";
 
 export default function FinancePage() {
@@ -17,9 +17,8 @@ export default function FinancePage() {
     const confirmed = bookings.filter((b) => b.status === "confirmed");
     const cancelled = bookings.filter((b) => b.status === "cancelled");
     const revenue = confirmed.reduce((sum, b) => sum + b.total_price_cents, 0);
-    const refunded = cancelled.reduce((sum, b) => sum + b.total_price_cents, 0);
-    const stripeFees = Math.round(revenue * 0.029 + confirmed.length * 30); // 2.9% + $0.30
-    const netRevenue = revenue - stripeFees;
+    const collected = confirmed.filter((b) => b.payment_collected).reduce((sum, b) => sum + b.total_price_cents, 0);
+    const outstanding = revenue - collected;
 
     // Revenue by direction
     const toSnookRev = confirmed
@@ -27,7 +26,7 @@ export default function FinancePage() {
       .reduce((sum, b) => sum + b.total_price_cents, 0);
     const toCstatRev = revenue - toSnookRev;
 
-    return { revenue, refunded, stripeFees, netRevenue, confirmed: confirmed.length, cancelled: cancelled.length, toSnookRev, toCstatRev };
+    return { revenue, collected, outstanding, confirmed: confirmed.length, cancelled: cancelled.length, toSnookRev, toCstatRev };
   }, [bookings, rides]);
 
   function handleExport() {
@@ -38,10 +37,10 @@ export default function FinancePage() {
         status: b.status,
         passengers: b.num_passengers,
         amount: `$${(b.total_price_cents / 100).toFixed(2)}`,
+        payment_collected: b.payment_collected ? "Yes" : "No",
         direction: ride?.direction || "unknown",
         departure: ride?.departure_time || "",
         booked_at: b.created_at,
-        stripe_id: b.stripe_payment_intent_id || "",
       };
     });
     exportToCSV(data, `12thvan-finance-${new Date().toISOString().slice(0, 10)}`);
@@ -52,7 +51,7 @@ export default function FinancePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Finance</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Revenue tracking and financial overview</p>
+          <p className="mt-1 text-sm text-muted-foreground">Revenue tracking — payments collected in person (cash/tap)</p>
         </div>
         <Button variant="secondary" onClick={handleExport}>
           <Download className="h-4 w-4 mr-1" />
@@ -61,10 +60,10 @@ export default function FinancePage() {
       </div>
 
       <div className="mt-6 grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Gross Revenue" value={formatCents(stats.revenue)} icon={DollarSign} trend={`${stats.confirmed} bookings`} trendUp />
-        <StatCard title="Stripe Fees" value={formatCents(stats.stripeFees)} icon={ArrowDownRight} trend="2.9% + $0.30/txn" />
-        <StatCard title="Net Revenue" value={formatCents(stats.netRevenue)} icon={TrendingUp} trendUp />
-        <StatCard title="Refunded" value={formatCents(stats.refunded)} icon={ArrowDownRight} trend={`${stats.cancelled} cancelled`} />
+        <StatCard title="Expected Revenue" value={formatCents(stats.revenue)} icon={DollarSign} trend={`${stats.confirmed} bookings`} trendUp />
+        <StatCard title="Collected" value={formatCents(stats.collected)} icon={TrendingUp} trendUp />
+        <StatCard title="Outstanding" value={formatCents(stats.outstanding)} icon={Banknote} trend="Cash/tap at pickup" />
+        <StatCard title="Cancelled" value={`${stats.cancelled}`} icon={ArrowDownRight} trend={`${stats.cancelled} bookings`} />
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
@@ -108,7 +107,7 @@ export default function FinancePage() {
         {/* Transaction log */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Recent Transactions</CardTitle>
+            <CardTitle className="text-lg">Recent Bookings</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-2">

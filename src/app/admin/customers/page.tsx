@@ -1,22 +1,43 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { useState, useEffect, useMemo } from "react";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Search, Phone, Mail, Download } from "lucide-react";
-import { getAllUsers, type AuthUser } from "@/lib/auth-store";
-import { useBookings, useRides, exportToCSV } from "@/lib/data-store";
-import { formatCents, formatDate } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
+import { useBookings, exportToCSV } from "@/lib/data-store";
+import { formatCents } from "@/lib/utils";
+import type { AuthUser } from "@/lib/auth-store";
+import type { UserRole } from "@/lib/types";
 
 export default function CustomersPage() {
   const [search, setSearch] = useState("");
+  const [allUsers, setAllUsers] = useState<AuthUser[]>([]);
   const { bookings } = useBookings();
-  const { rides } = useRides();
-  const allUsers = useMemo(() => getAllUsers().filter((u) => u.role === "rider"), []);
 
-  // Build customer profiles from bookings
+  useEffect(() => {
+    async function fetchRiders() {
+      const { data } = await supabase
+        .from("users")
+        .select("*")
+        .eq("role", "rider")
+        .order("created_at", { ascending: false });
+      if (data) {
+        setAllUsers(data.map((u) => ({
+          id: u.id,
+          auth_id: u.auth_id,
+          name: u.name,
+          email: u.email,
+          phone: u.phone,
+          role: u.role as UserRole,
+          photo_url: u.photo_url,
+          bio: u.bio,
+        })));
+      }
+    }
+    fetchRiders();
+  }, []);
+
   const customers = useMemo(() => {
     const map = new Map<string, {
       user: AuthUser;
@@ -37,11 +58,10 @@ export default function CustomersPage() {
       });
     }
 
-    // Also create entries from bookings that don't match a user
     for (const b of bookings) {
       if (!map.has(b.user_id)) {
         map.set(b.user_id, {
-          user: { id: b.user_id, name: `Rider #${b.user_id.slice(0, 6)}`, email: "", phone: "", role: "rider" },
+          user: { id: b.user_id, auth_id: "", name: b.rider_name || `Rider`, email: b.rider_email || "", phone: b.rider_phone, role: "rider" },
           bookingCount: 1,
           totalSpent: b.status === "confirmed" ? b.total_price_cents : 0,
           lastBooking: b.created_at,
@@ -91,7 +111,6 @@ export default function CustomersPage() {
         </Button>
       </div>
 
-      {/* Search */}
       <div className="mt-6 relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <input
@@ -103,7 +122,6 @@ export default function CustomersPage() {
         />
       </div>
 
-      {/* Customer list */}
       <div className="mt-6 flex flex-col gap-3">
         {filtered.length === 0 ? (
           <Card className="p-8 text-center text-muted-foreground">

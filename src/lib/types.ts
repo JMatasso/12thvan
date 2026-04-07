@@ -2,15 +2,16 @@ export type UserRole = "rider" | "driver" | "admin";
 export type Direction = "to_snook" | "to_cstat";
 export type RideStatus = "open" | "full" | "departed" | "completed" | "cancelled";
 export type BookingStatus = "confirmed" | "cancelled" | "completed" | "no_show";
-export type PaymentStatus = "pending" | "succeeded" | "failed" | "refunded";
 
 export interface User {
   id: string;
+  auth_id?: string;
   name: string;
   email: string;
-  phone: string;
+  phone?: string;
   role: UserRole;
-  stripe_customer_id: string | null;
+  photo_url?: string;
+  bio?: string;
   created_at: string;
 }
 
@@ -45,23 +46,25 @@ export interface Booking {
   num_passengers: number;
   status: BookingStatus;
   total_price_cents: number;
-  stripe_payment_intent_id: string | null;
+  rider_name: string;
+  rider_email: string;
+  rider_phone: string;
+  payment_collected: boolean;
   created_at: string;
-  rider_name?: string;
-  rider_phone?: string;
-  rider_email?: string;
+  cancelled_at?: string;
+  cancellation_reason?: string;
   rider?: User;
   ride_slot?: RideSlot;
+  friends?: BookingFriend[];
 }
 
-export interface Payment {
+export interface BookingFriend {
   id: string;
   booking_id: string;
-  amount_cents: number;
-  stripe_id: string;
-  status: PaymentStatus;
-  refund_cents: number;
-  created_at: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  created_at?: string;
 }
 
 export interface BookingFormData {
@@ -70,4 +73,5 @@ export interface BookingFormData {
   phone: string;
   num_passengers: number;
   agreed_to_waiver: boolean;
+  friends: { name: string; email?: string; phone?: string }[];
 }

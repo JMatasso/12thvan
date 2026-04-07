@@ -1,42 +1,52 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Plus, Trash2, Shield, Car, User } from "lucide-react";
-import { getAllUsers, addUserToDB, removeUserFromDB, updateUserInDB, type AuthUser } from "@/lib/auth-store";
-import { useAuth } from "@/lib/auth-store";
+import { useAuth, type AuthUser } from "@/lib/auth-store";
+import { supabase } from "@/lib/supabase";
 import type { UserRole } from "@/lib/types";
 
 export default function TeamPage() {
   const { user: currentUser } = useAuth();
-  const [users, setUsers] = useState<(AuthUser & { password?: string })[]>([]);
+  const [users, setUsers] = useState<AuthUser[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [filter, setFilter] = useState<"all" | UserRole>("all");
 
-  useEffect(() => {
-    setUsers(getAllUsers());
-  }, []);
-
-  function refreshUsers() {
-    setUsers(getAllUsers());
+  async function fetchUsers() {
+    const { data } = await supabase.from("users").select("*").order("created_at");
+    if (data) {
+      setUsers(data.map((u) => ({
+        id: u.id,
+        auth_id: u.auth_id,
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        role: u.role as UserRole,
+        photo_url: u.photo_url,
+        bio: u.bio,
+      })));
+    }
   }
 
-  function handleRemove(email: string) {
-    if (email === currentUser?.email) return;
-    if (!confirm(`Remove ${email}? They will no longer be able to log in.`)) return;
-    removeUserFromDB(email);
-    refreshUsers();
+  useEffect(() => { fetchUsers(); }, []);
+
+  async function handleRemove(userId: string) {
+    if (userId === currentUser?.id) return;
+    if (!confirm("Remove this user? They will no longer be able to access the system.")) return;
+    await supabase.from("users").delete().eq("id", userId);
+    fetchUsers();
   }
 
-  function handleRoleChange(email: string, newRole: UserRole) {
-    if (email === currentUser?.email) return;
-    updateUserInDB(email, { role: newRole });
-    refreshUsers();
+  async function handleRoleChange(userId: string, newRole: UserRole) {
+    if (userId === currentUser?.id) return;
+    await supabase.from("users").update({ role: newRole }).eq("id", userId);
+    fetchUsers();
   }
 
   const filtered = filter === "all" ? users : users.filter((u) => u.role === filter);
@@ -59,7 +69,6 @@ export default function TeamPage() {
         </Button>
       </div>
 
-      {/* Filter tabs */}
       <div className="mt-6 flex gap-2">
         {(["all", "admin", "driver", "rider"] as const).map((f) => (
           <button
@@ -74,15 +83,14 @@ export default function TeamPage() {
         ))}
       </div>
 
-      {/* Users list */}
       <div className="mt-6 flex flex-col gap-3">
         {filtered.map((u) => {
-          const isCurrentUser = u.email === currentUser?.email;
+          const isCurrentUser = u.id === currentUser?.id;
           const roleIcon = u.role === "admin" ? Shield : u.role === "driver" ? Car : User;
           const RoleIcon = roleIcon;
 
           return (
-            <Card key={u.email} className="p-4">
+            <Card key={u.id} className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-maroon/10 overflow-hidden flex-shrink-0">
@@ -112,7 +120,7 @@ export default function TeamPage() {
                       { value: "rider", label: "Rider" },
                     ]}
                     value={u.role}
-                    onChange={(e) => handleRoleChange(u.email, e.target.value as UserRole)}
+                    onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)}
                     disabled={isCurrentUser}
                     className="w-28 h-9 text-sm"
                   />
@@ -120,7 +128,7 @@ export default function TeamPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => handleRemove(u.email)}
+                      onClick={() => handleRemove(u.id)}
                       className="text-danger hover:bg-danger/10"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -133,15 +141,12 @@ export default function TeamPage() {
         })}
       </div>
 
-      {/* Add person dialog */}
       <Dialog open={showAdd} onOpenChange={setShowAdd}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Team Member</DialogTitle>
           </DialogHeader>
-          <AddPersonForm
-            onAdded={() => { refreshUsers(); setShowAdd(false); }}
-          />
+          <AddPersonForm onAdded={() => { fetchUsers(); setShowAdd(false); }} />
         </DialogContent>
       </Dialog>
     </div>
@@ -153,47 +158,43 @@ function AddPersonForm({ onAdded }: { onAdded: () => void }) {
     name: "",
     email: "",
     phone: "",
-    password: "",
     role: "admin" as UserRole,
   });
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
 
-    if (!form.name || !form.email || !form.password) {
-      setError("Name, email, and password are required");
-      return;
-    }
-    if (form.password.length < 6) {
-      setError("Password must be at least 6 characters");
+    if (!form.name || !form.email) {
+      setError("Name and email are required");
       return;
     }
 
-    const success = addUserToDB({
-      id: `${form.role}-${Date.now()}`,
+    setLoading(true);
+    const { error: insertError } = await supabase.from("users").insert({
       name: form.name,
       email: form.email,
-      phone: form.phone,
+      phone: form.phone || null,
       role: form.role,
-      password: form.password,
     });
 
-    if (!success) {
-      setError("A user with this email already exists");
+    if (insertError) {
+      setError(insertError.message);
+      setLoading(false);
       return;
     }
 
+    setLoading(false);
     onAdded();
   }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-4">
-      <Input id="name" label="Name" placeholder="John Doe" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-      <Input id="email" label="Email" type="email" placeholder="john@12thvan.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+      <Input id="name" label="Name" placeholder="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+      <Input id="email" label="Email" type="email" placeholder="user@12thvan.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
       <Input id="phone" label="Phone" type="tel" placeholder="(979) 555-1234" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-      <Input id="password" label="Password" type="password" placeholder="Min 6 characters" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
       <Select
         id="role"
         label="Role"
@@ -206,7 +207,7 @@ function AddPersonForm({ onAdded }: { onAdded: () => void }) {
         onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })}
       />
       {error && <p className="text-sm text-danger">{error}</p>}
-      <Button type="submit">Add to Team</Button>
+      <Button type="submit" disabled={loading}>{loading ? "Adding..." : "Add to Team"}</Button>
     </form>
   );
 }

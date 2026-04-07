@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { getServiceClient } from "@/lib/supabase";
 
 export async function PATCH(
   request: NextRequest,
@@ -6,9 +7,8 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const body = await request.json();
+  const sb = getServiceClient();
 
-  // In production: update ride slot in Supabase
-  // Validate that only allowed fields are updated (status, departure_time, etc.)
   const allowedFields = ["status", "departure_time", "capacity", "price_cents"];
   const updates: Record<string, unknown> = {};
 
@@ -18,10 +18,18 @@ export async function PATCH(
     }
   }
 
-  return Response.json({
-    ride_slot: { id, ...updates },
-    message: "Ride slot updated (demo mode)",
-  });
+  const { data, error } = await sb
+    .from("ride_slots")
+    .update(updates)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+
+  return Response.json({ ride_slot: data });
 }
 
 export async function DELETE(
@@ -29,9 +37,16 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const sb = getServiceClient();
 
-  // In production: delete from Supabase, refund any bookings
-  return Response.json({
-    message: `Ride slot ${id} deleted (demo mode)`,
-  });
+  const { error } = await sb
+    .from("ride_slots")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+
+  return Response.json({ message: "Ride slot deleted" });
 }

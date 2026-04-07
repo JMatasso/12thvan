@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { formatCents, formatTime, formatDate, spotsRemaining } from "@/lib/utils";
 import { LIABILITY_WAIVER } from "@/lib/constants";
+import { UserPlus, X, Banknote } from "lucide-react";
 import type { RideSlot, BookingFormData } from "@/lib/types";
 
 interface BookingFormProps {
@@ -21,24 +22,50 @@ interface BookingFormProps {
   onSubmit: (data: BookingFormData) => void;
   onCancel: () => void;
   loading?: boolean;
+  defaultName?: string;
+  defaultEmail?: string;
+  defaultPhone?: string;
 }
 
-export function BookingForm({ slot, onSubmit, onCancel, loading }: BookingFormProps) {
+export function BookingForm({ slot, onSubmit, onCancel, loading, defaultName, defaultEmail, defaultPhone }: BookingFormProps) {
   const [form, setForm] = useState<BookingFormData>({
-    name: "",
-    email: "",
-    phone: "",
+    name: defaultName || "",
+    email: defaultEmail || "",
+    phone: defaultPhone || "",
     num_passengers: 1,
     agreed_to_waiver: false,
+    friends: [],
   });
-  const [errors, setErrors] = useState<Partial<Record<keyof BookingFormData, string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
   const [showWaiver, setShowWaiver] = useState(false);
 
   const maxPassengers = spotsRemaining(slot.capacity, slot.booked_count);
   const totalPrice = slot.price_cents * form.num_passengers;
 
+  function addFriend() {
+    if (form.friends.length < form.num_passengers - 1) {
+      setForm({
+        ...form,
+        friends: [...form.friends, { name: "", email: "", phone: "" }],
+      });
+    }
+  }
+
+  function removeFriend(index: number) {
+    setForm({
+      ...form,
+      friends: form.friends.filter((_, i) => i !== index),
+    });
+  }
+
+  function updateFriend(index: number, field: string, value: string) {
+    const updated = [...form.friends];
+    updated[index] = { ...updated[index], [field]: value };
+    setForm({ ...form, friends: updated });
+  }
+
   function validate(): boolean {
-    const newErrors: typeof errors = {};
+    const newErrors: Record<string, string> = {};
     if (form.name.length < 2) newErrors.name = "Name is required";
     if (!/\S+@\S+\.\S+/.test(form.email)) newErrors.email = "Valid email required";
     if (form.phone.replace(/\D/g, "").length < 10) newErrors.phone = "Valid phone required";
@@ -46,6 +73,12 @@ export function BookingForm({ slot, onSubmit, onCancel, loading }: BookingFormPr
       newErrors.num_passengers = `1-${maxPassengers} passengers`;
     }
     if (!form.agreed_to_waiver) newErrors.agreed_to_waiver = "You must agree to the waiver";
+
+    // Validate friends
+    form.friends.forEach((f, i) => {
+      if (!f.name.trim()) newErrors[`friend_${i}_name`] = "Friend name required";
+    });
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }
@@ -59,6 +92,8 @@ export function BookingForm({ slot, onSubmit, onCancel, loading }: BookingFormPr
     value: String(i + 1),
     label: `${i + 1} ${i === 0 ? "passenger" : "passengers"}`,
   }));
+
+  const canAddFriend = form.friends.length < form.num_passengers - 1;
 
   return (
     <>
@@ -78,7 +113,7 @@ export function BookingForm({ slot, onSubmit, onCancel, loading }: BookingFormPr
             <Input
               id="name"
               label="Full Name"
-              placeholder="John Doe"
+              placeholder="Your full name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               error={errors.name}
@@ -103,14 +138,87 @@ export function BookingForm({ slot, onSubmit, onCancel, loading }: BookingFormPr
             />
             <Select
               id="passengers"
-              label="Number of Passengers"
+              label="Total Passengers (including you)"
               options={passengerOptions}
               value={String(form.num_passengers)}
-              onChange={(e) =>
-                setForm({ ...form, num_passengers: parseInt(e.target.value) })
-              }
+              onChange={(e) => {
+                const num = parseInt(e.target.value);
+                setForm({
+                  ...form,
+                  num_passengers: num,
+                  friends: form.friends.slice(0, Math.max(0, num - 1)),
+                });
+              }}
               error={errors.num_passengers}
             />
+
+            {/* Friends section */}
+            {form.num_passengers > 1 && (
+              <div className="flex flex-col gap-3 rounded-xl border border-border p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-foreground">
+                    Add your friends
+                  </p>
+                  <span className="text-xs text-muted-foreground">
+                    {form.friends.length}/{form.num_passengers - 1} added
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Friends with an account can see this ride on their dashboard. Email is optional but recommended.
+                </p>
+
+                {form.friends.map((friend, i) => (
+                  <div key={i} className="flex flex-col gap-2 rounded-lg bg-muted/50 p-3 relative">
+                    <button
+                      type="button"
+                      onClick={() => removeFriend(i)}
+                      className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                    <Input
+                      id={`friend-${i}-name`}
+                      label={`Friend ${i + 1} Name`}
+                      placeholder="Friend's name"
+                      value={friend.name}
+                      onChange={(e) => updateFriend(i, "name", e.target.value)}
+                      error={errors[`friend_${i}_name`]}
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        id={`friend-${i}-email`}
+                        label="Email (optional)"
+                        type="email"
+                        placeholder="friend@tamu.edu"
+                        value={friend.email || ""}
+                        onChange={(e) => updateFriend(i, "email", e.target.value)}
+                      />
+                      <Input
+                        id={`friend-${i}-phone`}
+                        label="Phone (optional)"
+                        type="tel"
+                        placeholder="(979) 555-0000"
+                        value={friend.phone || ""}
+                        onChange={(e) => updateFriend(i, "phone", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                ))}
+
+                {canAddFriend && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={addFriend}
+                    className="w-full"
+                  >
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Add Friend
+                  </Button>
+                )}
+              </div>
+            )}
 
             {/* Waiver checkbox */}
             <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/50 p-4">
@@ -142,6 +250,19 @@ export function BookingForm({ slot, onSubmit, onCancel, loading }: BookingFormPr
               )}
             </div>
 
+            {/* In-person payment notice */}
+            <div className="flex items-start gap-3 rounded-xl bg-amber-50 border border-amber-200 p-4">
+              <Banknote className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-amber-800">
+                  Payment collected in person
+                </p>
+                <p className="text-xs text-amber-700 mt-1">
+                  Bring <strong>cash or tap-to-pay</strong> for {formatCents(totalPrice)}. Your driver will collect payment at pickup.
+                </p>
+              </div>
+            </div>
+
             {/* Price summary */}
             <div className="flex items-center justify-between rounded-xl bg-maroon/5 p-4">
               <div>
@@ -153,7 +274,7 @@ export function BookingForm({ slot, onSubmit, onCancel, loading }: BookingFormPr
                 </p>
               </div>
               <p className="text-xs text-muted-foreground max-w-[150px] text-right">
-                Secure payment via Stripe. Your card info never touches our servers.
+                Pay in person with cash or tap when you arrive at pickup.
               </p>
             </div>
 
@@ -162,7 +283,7 @@ export function BookingForm({ slot, onSubmit, onCancel, loading }: BookingFormPr
                 Back
               </Button>
               <Button type="submit" disabled={loading} className="flex-1">
-                {loading ? "Processing..." : `Pay ${formatCents(totalPrice)}`}
+                {loading ? "Booking..." : `Reserve ${form.num_passengers} Seat${form.num_passengers > 1 ? "s" : ""}`}
               </Button>
             </div>
           </form>

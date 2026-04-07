@@ -9,17 +9,20 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ============================================================
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  auth_id UUID UNIQUE, -- links to Supabase Auth user
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
   phone TEXT,
   role TEXT NOT NULL DEFAULT 'rider' CHECK (role IN ('rider', 'driver', 'admin')),
-  stripe_customer_id TEXT,
+  photo_url TEXT,
+  bio TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_auth_id ON users(auth_id);
 
 -- ============================================================
 -- VEHICLES
@@ -62,7 +65,7 @@ CREATE INDEX idx_ride_slots_driver ON ride_slots(driver_id);
 CREATE INDEX idx_ride_slots_direction ON ride_slots(direction);
 
 -- ============================================================
--- BOOKINGS
+-- BOOKINGS (no Stripe — payment is in-person cash/tap)
 -- ============================================================
 CREATE TABLE bookings (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -71,7 +74,10 @@ CREATE TABLE bookings (
   num_passengers INTEGER NOT NULL CHECK (num_passengers >= 1),
   status TEXT NOT NULL DEFAULT 'confirmed' CHECK (status IN ('confirmed', 'cancelled', 'completed', 'no_show')),
   total_price_cents INTEGER NOT NULL,
-  stripe_payment_intent_id TEXT,
+  rider_name TEXT NOT NULL,
+  rider_email TEXT NOT NULL,
+  rider_phone TEXT NOT NULL,
+  payment_collected BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   cancelled_at TIMESTAMPTZ,
   cancellation_reason TEXT
@@ -82,20 +88,19 @@ CREATE INDEX idx_bookings_ride_slot ON bookings(ride_slot_id);
 CREATE INDEX idx_bookings_status ON bookings(status);
 
 -- ============================================================
--- PAYMENTS
+-- BOOKING FRIENDS (named passengers attached to a booking)
 -- ============================================================
-CREATE TABLE payments (
+CREATE TABLE booking_friends (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   booking_id UUID NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
-  amount_cents INTEGER NOT NULL,
-  stripe_id TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'succeeded', 'failed', 'refunded')),
-  refund_cents INTEGER NOT NULL DEFAULT 0,
+  name TEXT NOT NULL,
+  email TEXT,
+  phone TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_payments_booking ON payments(booking_id);
-CREATE INDEX idx_payments_stripe ON payments(stripe_id);
+CREATE INDEX idx_booking_friends_booking ON booking_friends(booking_id);
+CREATE INDEX idx_booking_friends_email ON booking_friends(email);
 
 -- ============================================================
 -- FUNCTIONS
@@ -177,64 +182,137 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE vehicles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ride_slots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE booking_friends ENABLE ROW LEVEL SECURITY;
 
 -- Public can read ride slots (for the booking page)
 CREATE POLICY "Anyone can view open ride slots"
   ON ride_slots FOR SELECT
   USING (status IN ('open', 'full'));
 
+-- Public can read vehicles (for enriching ride slot cards)
+CREATE POLICY "Anyone can view vehicles"
+  ON vehicles FOR SELECT
+  USING (true);
+
+-- Users can read their own profile
+CREATE POLICY "Users can view own profile"
+  ON users FOR SELECT
+  USING (auth_id = auth.uid());
+
+-- Users can update their own profile
+CREATE POLICY "Users can update own profile"
+  ON users FOR UPDATE
+  USING (auth_id = auth.uid())
+  WITH CHECK (auth_id = auth.uid());
+
 -- Authenticated users can view their own bookings
 CREATE POLICY "Users can view own bookings"
   ON bookings FOR SELECT
-  USING (auth.uid() = user_id);
+  USING (user_id IN (SELECT id FROM users WHERE auth_id = auth.uid()));
+
+-- Users can insert bookings for themselves
+CREATE POLICY "Users can create bookings"
+  ON bookings FOR INSERT
+  WITH CHECK (user_id IN (SELECT id FROM users WHERE auth_id = auth.uid()));
+
+-- Users can update their own bookings (for cancellation)
+CREATE POLICY "Users can update own bookings"
+  ON bookings FOR UPDATE
+  USING (user_id IN (SELECT id FROM users WHERE auth_id = auth.uid()));
+
+-- Users can view friends on their own bookings
+CREATE POLICY "Users can view own booking friends"
+  ON booking_friends FOR SELECT
+  USING (booking_id IN (SELECT id FROM bookings WHERE user_id IN (SELECT id FROM users WHERE auth_id = auth.uid())));
+
+-- Users can manage friends on their own bookings
+CREATE POLICY "Users can manage own booking friends"
+  ON booking_friends FOR INSERT
+  WITH CHECK (booking_id IN (SELECT id FROM bookings WHERE user_id IN (SELECT id FROM users WHERE auth_id = auth.uid())));
+
+CREATE POLICY "Users can delete own booking friends"
+  ON booking_friends FOR DELETE
+  USING (booking_id IN (SELECT id FROM bookings WHERE user_id IN (SELECT id FROM users WHERE auth_id = auth.uid())));
+
+-- Friends can view bookings they're added to (by email match)
+CREATE POLICY "Friends can view bookings they are on"
+  ON bookings FOR SELECT
+  USING (
+    id IN (
+      SELECT bf.booking_id FROM booking_friends bf
+      JOIN users u ON u.email = bf.email
+      WHERE u.auth_id = auth.uid()
+    )
+  );
+
+-- Friends can view their own friend entries
+CREATE POLICY "Friends can view their friend entries"
+  ON booking_friends FOR SELECT
+  USING (
+    email IN (SELECT email FROM users WHERE auth_id = auth.uid())
+  );
 
 -- Admins can do everything
 CREATE POLICY "Admins have full access to users"
   ON users FOR ALL
   USING (
-    EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'admin')
+    EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND role = 'admin')
   );
 
 CREATE POLICY "Admins have full access to ride_slots"
   ON ride_slots FOR ALL
   USING (
-    EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'admin')
+    EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND role = 'admin')
   );
 
 CREATE POLICY "Admins have full access to bookings"
   ON bookings FOR ALL
   USING (
-    EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'admin')
+    EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND role = 'admin')
   );
 
-CREATE POLICY "Admins have full access to payments"
-  ON payments FOR ALL
+CREATE POLICY "Admins have full access to booking_friends"
+  ON booking_friends FOR ALL
   USING (
-    EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'admin')
+    EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND role = 'admin')
   );
 
--- Drivers can view their assigned rides
+CREATE POLICY "Admins have full access to vehicles"
+  ON vehicles FOR ALL
+  USING (
+    EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND role = 'admin')
+  );
+
+-- Drivers can view their assigned rides (all statuses)
 CREATE POLICY "Drivers can view own rides"
   ON ride_slots FOR SELECT
-  USING (driver_id = auth.uid());
+  USING (driver_id IN (SELECT id FROM users WHERE auth_id = auth.uid()));
 
 CREATE POLICY "Drivers can update own ride status"
   ON ride_slots FOR UPDATE
-  USING (driver_id = auth.uid())
-  WITH CHECK (driver_id = auth.uid());
+  USING (driver_id IN (SELECT id FROM users WHERE auth_id = auth.uid()))
+  WITH CHECK (driver_id IN (SELECT id FROM users WHERE auth_id = auth.uid()));
 
--- ============================================================
--- SEED DATA (for demo)
--- ============================================================
--- Uncomment and run after creating auth users to seed initial data
+-- Drivers can view bookings on their rides
+CREATE POLICY "Drivers can view bookings on own rides"
+  ON bookings FOR SELECT
+  USING (ride_slot_id IN (SELECT id FROM ride_slots WHERE driver_id IN (SELECT id FROM users WHERE auth_id = auth.uid())));
 
--- INSERT INTO users (id, name, email, phone, role) VALUES
---   ('00000000-0000-0000-0000-000000000001', 'Admin', 'admin@12thvan.com', '9795551111', 'admin'),
---   ('00000000-0000-0000-0000-000000000002', 'Jake Morrison', 'jake@12thvan.com', '9795551234', 'driver'),
---   ('00000000-0000-0000-0000-000000000003', 'Sarah Chen', 'sarah@12thvan.com', '9795555678', 'driver');
+-- Drivers can view friends on bookings for their rides
+CREATE POLICY "Drivers can view friends on own ride bookings"
+  ON booking_friends FOR SELECT
+  USING (booking_id IN (
+    SELECT b.id FROM bookings b
+    JOIN ride_slots rs ON rs.id = b.ride_slot_id
+    WHERE rs.driver_id IN (SELECT id FROM users WHERE auth_id = auth.uid())
+  ));
 
--- INSERT INTO vehicles (driver_id, type, capacity, description) VALUES
---   ('00000000-0000-0000-0000-000000000002', 'truck', 5, 'Silver F-150 Crew Cab'),
---   ('00000000-0000-0000-0000-000000000003', 'van', 12, 'White 15-Passenger Van'),
---   ('00000000-0000-0000-0000-000000000002', 'car', 4, 'Black Tahoe');
+-- Drivers can view their own vehicle info
+CREATE POLICY "Drivers can view own vehicles"
+  ON vehicles FOR SELECT
+  USING (driver_id IN (SELECT id FROM users WHERE auth_id = auth.uid()));
+
+-- Anyone can read user name/role (for driver info on ride cards)
+CREATE POLICY "Anyone can view basic user info"
+  ON users FOR SELECT
+  USING (role IN ('driver', 'admin'));
