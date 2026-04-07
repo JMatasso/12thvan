@@ -45,29 +45,18 @@ export function useAuth() {
 
 export { AuthContext };
 
-async function fetchUserProfile(authId: string): Promise<AuthUser | null> {
-  const { data, error } = await supabase
-    .from("users")
-    .select("*")
-    .eq("auth_id", authId)
-    .maybeSingle();
-
-  if (error) {
-    console.error("Failed to fetch user profile:", error.message);
+// Fetch profile via server API to bypass RLS
+async function fetchUserProfile(accessToken: string): Promise<AuthUser | null> {
+  try {
+    const res = await fetch("/api/auth/me", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.user || null;
+  } catch {
     return null;
   }
-  if (!data) return null;
-
-  return {
-    id: data.id,
-    auth_id: data.auth_id,
-    name: data.name,
-    email: data.email,
-    phone: data.phone,
-    role: data.role as UserRole,
-    photo_url: data.photo_url,
-    bio: data.bio,
-  };
 }
 
 export function useAuthProvider(): AuthState {
@@ -80,8 +69,8 @@ export function useAuthProvider(): AuthState {
     async function init() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user && mounted) {
-          const profile = await fetchUserProfile(session.user.id);
+        if (session?.access_token && mounted) {
+          const profile = await fetchUserProfile(session.access_token);
           if (mounted) setUser(profile);
         }
       } catch (err) {
@@ -93,8 +82,8 @@ export function useAuthProvider(): AuthState {
     init();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        const profile = await fetchUserProfile(session.user.id);
+      if (session?.access_token) {
+        const profile = await fetchUserProfile(session.access_token);
         if (mounted) {
           setUser(profile);
           setLoading(false);
@@ -128,8 +117,7 @@ export function useAuthProvider(): AuthState {
     if (authError) return { success: false, error: authError.message };
     if (!authData.user) return { success: false, error: "Registration failed" };
 
-    // Create the user profile in our users table
-    // Use the service client via API to bypass RLS for new user creation
+    // Create the user profile via server API (bypasses RLS)
     try {
       const res = await fetch("/api/auth/create-profile", {
         method: "POST",
