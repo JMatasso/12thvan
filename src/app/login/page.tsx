@@ -61,7 +61,13 @@ export default function LoginPage() {
     } else {
       const result = await login(email, password);
       if (result.success) {
-        // The useEffect above will handle redirect once user state updates
+        // Wait a moment for auth state to update, then redirect
+        // The useEffect will handle it if user state updates in time
+        // Fallback: redirect after 2 seconds even if profile hasn't loaded
+        setTimeout(() => {
+          setLoading(false);
+          router.push("/my-rides");
+        }, 2000);
         return;
       } else {
         setError(result.error || "Invalid email or password");

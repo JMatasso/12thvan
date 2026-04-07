@@ -12,6 +12,6 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
 
 export function getServiceClient(): SupabaseClient {
   const rawServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-  const serviceKey = rawServiceKey.startsWith("ey") ? rawServiceKey : "placeholder";
+  const serviceKey = (rawServiceKey && !rawServiceKey.startsWith("your_")) ? rawServiceKey : "placeholder";
   return createClient(supabaseUrl, serviceKey);
 }
