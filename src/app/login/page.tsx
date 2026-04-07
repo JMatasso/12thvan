@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/landing/navbar";
 import { Footer } from "@/components/landing/footer";
@@ -13,7 +13,7 @@ type Mode = "login" | "register";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, register } = useAuth();
+  const { user, loading: authLoading, login, register } = useAuth();
   const [mode, setMode] = useState<Mode>("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -22,6 +22,15 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState("");
+
+  // If already logged in, redirect
+  useEffect(() => {
+    if (!authLoading && user) {
+      if (user.role === "admin") router.push("/admin");
+      else if (user.role === "driver") router.push("/driver");
+      else router.push("/my-rides");
+    }
+  }, [user, authLoading, router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,7 +50,7 @@ export default function LoginPage() {
         // Auto-login after registration
         const loginResult = await login(email, password);
         if (loginResult.success) {
-          router.push("/my-rides");
+          // The useEffect above will handle redirect once user state updates
           return;
         }
         setSuccess("Account created! You can now log in.");
@@ -52,7 +61,7 @@ export default function LoginPage() {
     } else {
       const result = await login(email, password);
       if (result.success) {
-        router.push("/my-rides");
+        // The useEffect above will handle redirect once user state updates
         return;
       } else {
         setError(result.error || "Invalid email or password");
@@ -60,6 +69,19 @@ export default function LoginPage() {
     }
 
     setLoading(false);
+  }
+
+  // Don't show login form if already authenticated
+  if (authLoading || user) {
+    return (
+      <>
+        <Navbar />
+        <main className="flex flex-1 items-center justify-center pt-24 pb-16">
+          <p className="text-muted-foreground">Loading...</p>
+        </main>
+        <Footer />
+      </>
+    );
   }
 
   return (
